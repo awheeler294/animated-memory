@@ -1,0 +1,10 @@
+[package]
+name = "animated-memory"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+getrandom = { version = "0.2.15", features = ["custom"] }
+# ggez = "0.9.3"
+good-web-game = "0.6.1"
+rand = "0.8.5"
