@@ -36,7 +36,8 @@ jobs:
       - run: rustup target add wasm32-unknown-unknown
       - run: cargo build --target wasm32-unknown-unknown
       - run: mkdir web
-      - run: cp target/wasm32-unknown-unknown/debug/*.wasm web/ 
+      - run: cp target/wasm32-unknown-unknown/debug/*.wasm web/
+      - run: cp index.html web/:
       
       - name: Setup Pages
         uses: actions/configure-pages@v5
