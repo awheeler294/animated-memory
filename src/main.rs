@@ -2,11 +2,13 @@ extern crate good_web_game as ggez;
 
 use core::f32;
 use std::char;
+use std::collections::HashSet;
 use std::env;
 use std::f32::consts::PI;
 use std::path;
 
 use getrandom::register_custom_getrandom;
+use ggez::input::keyboard::pressed_keys;
 use good_web_game::{
     Context,
     event::{
@@ -24,10 +26,7 @@ use good_web_game::{
         TextFragment,
         Vector2,
     },
-    input::{
-        self,
-        keyboard::KeyCode
-    },
+    input::keyboard::KeyCode,
 };
 
 use rand::{ prelude::SliceRandom, Rng, thread_rng };
@@ -73,6 +72,7 @@ struct State {
     player: Player,
     words: Vec<Word>,
     reset_typed: usize,
+    keys_pressed: HashSet<KeyCode>,
 }
 
 impl event::EventHandler for State {
@@ -81,25 +81,39 @@ impl event::EventHandler for State {
         gctx: &mut event::GraphicsContext,
     ) -> GameResult {
 
-        // cant call len inside an iter_mut because borrow checker
-        let len = self.words.len();
+        let new_keypress = {
+            let mut val = None;
+            for key_code in pressed_keys(ctx) {
+                if self.keys_pressed.contains(key_code) == false {
+                    val = Some(key_code);
+                    break;
+                }
+            }
+            
+            val
+        };
+
+        self.keys_pressed = pressed_keys(ctx).clone();
 
         for word in self.words.iter_mut() {
             if self.reset_typed > 0 {
                 if word.state == WordState::Active {
                     word.num_typed = 0;
                 }
-                self.reset_typed -= 1;
-            }
+            } else {
 
-            let old_state = word.state;
+                let old_state = word.state;
 
-            word.update(ctx, gctx)?;
-            
-            if old_state == WordState::Active && word.state == WordState::Typed {
-                self.reset_typed = len;
+                word.update(gctx, new_keypress)?;
+                
+                if old_state == WordState::Active && word.state == WordState::Typed {
+                    self.reset_typed = 2;
+                    break;
+                }
             }
         }
+
+        self.reset_typed = self.reset_typed.saturating_sub(1);
 
         Ok(())
     }
@@ -151,19 +165,18 @@ impl Word {
             state: WordState::Active,
         } 
     }
-}
 
-impl EventHandler for Word {
-
-    fn update(&mut self, ctx: &mut Context, _gctx: &mut event::GraphicsContext) -> GameResult {
+    fn update(&mut self, _gctx: &mut event::GraphicsContext, key_pressed: Option<&KeyCode>) -> GameResult {
         if let Some(next_ch) = self.word.get(self.num_typed) {
-            let key_code = ch_to_keycode(*next_ch)
-                .ok_or_else(|| GameError::CustomError(format!("unmapped character: {next_ch}")))?;
+            if let Some(key_pressed) = key_pressed {
+                let key_code = ch_to_keycode(*next_ch)
+                    .ok_or_else(|| GameError::CustomError(format!("unmapped character: {next_ch}")))?;
 
-            if input::keyboard::is_key_pressed(ctx, key_code) {
-                self.num_typed += 1;
+                if *key_pressed == key_code {
+                    self.num_typed += 1;
+                }
+
             }
-
             self.position += self.velocity;
 
         } else if self.state == WordState::Active {
@@ -289,6 +302,7 @@ fn main() -> GameResult{
         player: Player::new(player_position, player_radius),
         words,
         reset_typed: 0,
+        keys_pressed: HashSet::new(),
     };
 
     // We add the CARGO_MANIFEST_DIR/resources to the resource paths
