@@ -29,6 +29,9 @@ use good_web_game::{
     input::keyboard::KeyCode,
 };
 
+use keyframe::{functions::{EaseInOut, Linear}, AnimationSequence, Keyframe };
+
+use keyframe_derive::CanTween;
 use rand::{ prelude::SliceRandom, Rng, thread_rng };
 
 fn fallback_getrandom(_buf: &mut [u8]) -> Result<(), getrandom::Error> {
@@ -47,24 +50,63 @@ enum ColorPalette {
     Bg1,
     Bg2,
     Fg,
+    Fg0,
     Fg4,
     Blue,
     BrightYellow,
     Orange,
 }
 
+impl ColorPalette {
+    fn as_rgb(self) -> (u8, u8, u8) {
+        match self {
+            Self::Bg => (40, 40, 40),
+            Self::Bg1 => (60, 56, 54),
+            Self::Bg2 => (80, 73, 69),
+            Self::Fg0 => (251, 241, 199),
+            Self::Fg => (235, 219, 178),
+            Self::Fg4 => (168, 153, 132),
+            Self::Blue => (69, 133, 136),
+            Self::BrightYellow => (250, 189, 47),
+            Self::Orange => (214, 93, 14),
+        }
+    }
+}
+
 impl Into<Color> for ColorPalette {
     fn into(self) -> Color {
-        match self {
-            Self::Bg => Color::from_rgb(40, 40, 40),
-            Self::Bg1 => Color::from_rgb(60, 56, 54),
-            Self::Bg2 => Color::from_rgb(80, 73, 69),
-            Self::Fg => Color::from_rgb(235, 219, 178),
-            Self::Fg4 => Color::from_rgb(168, 153, 132),
-            Self::Blue => Color::from_rgb(69, 133, 136),
-            Self::BrightYellow => Color::from_rgb(250, 189, 47),
-            Self::Orange => Color::from_rgb(214, 93, 14)
+        let (r, g, b) = self.as_rgb();
+        Color::from_rgb(r, g, b)
+    }
+}
+
+impl Into<TweenableColor> for ColorPalette {
+    fn into(self) -> TweenableColor {
+        let (r, g, b) = self.as_rgb();
+        
+        let color = Color::from_rgb(r, g, b);
+
+        TweenableColor {
+            r: color.r,
+            g: color.g,
+            b: color.b,
+            a: color.a,
         }
+    }
+}
+
+/// necessary because we can't implement CanTween for Color directly, as it's a foreign type
+#[derive(CanTween, Clone, Copy)]
+struct TweenableColor {
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
+}
+
+impl From<TweenableColor> for Color {
+    fn from(tc: TweenableColor) -> Self {
+        Color::new(tc.r, tc.g, tc.b, tc.a)
     }
 }
 
@@ -85,7 +127,7 @@ impl event::EventHandler for State {
             let mut val = None;
             for key_code in pressed_keys(ctx) {
                 if self.keys_pressed.contains(key_code) == false {
-                    val = Some(key_code);
+                    val = Some(key_code.clone());
                     break;
                 }
             }
@@ -104,7 +146,7 @@ impl event::EventHandler for State {
 
                 let old_state = word.state;
 
-                word.update(gctx, new_keypress)?;
+                word.update(ctx, gctx, new_keypress)?;
                 
                 if old_state == WordState::Active && word.state == WordState::Typed {
                     self.reset_typed = 2;
@@ -152,10 +194,18 @@ struct Word {
     velocity: Vector2,
     color: Option<ColorPalette>,
     state: WordState,
+    death_animation: AnimationSequence<TweenableColor>,
 }
 
 impl Word {
     fn new(word: &str, position: Point2, velocity: Vector2) -> Self {
+        let animation_duration = 1.0;
+        let mut death_animation = AnimationSequence::new();
+        let _ = death_animation.insert(Keyframe::new(ColorPalette::BrightYellow.into(), 0.0, Linear));
+        let _ = death_animation.insert(Keyframe::new(ColorPalette::Fg0.into(), animation_duration * 0.05, Linear));
+        let _ = death_animation.insert(Keyframe::new(ColorPalette::Blue.into(), animation_duration * 0.45, EaseInOut));
+        let _ = death_animation.insert(Keyframe::new(ColorPalette::Bg.into(), animation_duration, EaseInOut));
+
         Self { 
             word: word.chars().collect(), 
             num_typed: 0, 
@@ -163,16 +213,29 @@ impl Word {
             velocity,
             color: None,
             state: WordState::Active,
+            death_animation,
+            // death_animation: keyframes![
+            //     (Color::from(ColorPalette::BrightYellow), 0.0, Linear),
+            //     (Color::from(ColorPalette::Fg0), animation_duration * 0.05, Linear),
+            // ],
         } 
     }
 
-    fn update(&mut self, _gctx: &mut event::GraphicsContext, key_pressed: Option<&KeyCode>) -> GameResult {
+    fn update(&mut self, ctx: &mut Context, _gctx: &mut event::GraphicsContext, key_pressed: Option<KeyCode>) -> GameResult {
+        if self.state == WordState::Typed && self.death_animation.finished() {
+            self.state = WordState::Dead;
+        }
+
+        if self.state == WordState::Typed {
+            self.death_animation.advance_by(ggez::timer::delta(ctx).as_secs_f64());
+        }
+
         if let Some(next_ch) = self.word.get(self.num_typed) {
             if let Some(key_pressed) = key_pressed {
                 let key_code = ch_to_keycode(*next_ch)
                     .ok_or_else(|| GameError::CustomError(format!("unmapped character: {next_ch}")))?;
 
-                if *key_pressed == key_code {
+                if key_pressed == key_code {
                     self.num_typed += 1;
                 }
 
@@ -188,10 +251,11 @@ impl Word {
 
     fn draw(&mut self, ctx: &mut Context, gctx: &mut event::GraphicsContext) -> GameResult {
         let typed_color = match self.state {
-            WordState::Active => ColorPalette::BrightYellow,
-            WordState::Typed => ColorPalette::Blue,
-            WordState::Dead => ColorPalette::Bg,
+            WordState::Active => ColorPalette::BrightYellow.into(),
+            WordState::Typed => self.death_animation.now_strict().unwrap_or_else(|| ColorPalette::Bg.into()),
+            WordState::Dead => ColorPalette::Bg.into(),
         };
+
         let untyped_color = self.color.unwrap_or_else(|| ColorPalette::Fg);
 
         let typed = 
