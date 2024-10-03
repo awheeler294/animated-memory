@@ -65,7 +65,7 @@ impl Game {
             let y = radius * theta.sin() + center_y * 2.0;
 
             let mut word = Word::new(label, Point2::new(x, y), Vector2::new(0.0, 0.0));
-            word.color = Some(ColorPalette::Bg2);
+            word.color = ColorPalette::Bg2;
             words.push(word);
         }
 
@@ -174,7 +174,7 @@ struct Word {
     num_typed: usize,
     position: Point2,
     velocity: Vector2,
-    color: Option<ColorPalette>,
+    color: ColorPalette,
     state: WordState,
     death_animation: AnimationSequence<TweenableColor>,
 }
@@ -193,7 +193,7 @@ impl Word {
             num_typed: 0, 
             position, 
             velocity,
-            color: None,
+            color: ColorPalette::Fg,
             state: WordState::Active,
             death_animation,
             // death_animation: keyframes![
@@ -238,15 +238,17 @@ impl Word {
             WordState::Dead => ColorPalette::Bg.into(),
         };
 
-        let untyped_color = self.color.unwrap_or_else(|| ColorPalette::Fg);
+        let untyped_color = self.color;
 
         let typed = 
             TextFragment::new(self.word[0..self.num_typed].iter().collect::<String>())
+            .scale(24.0)
             .color(typed_color);
 
         let mut rendered = Text::new(typed);
         rendered.add(
             TextFragment::new(self.word[self.num_typed..].iter().collect::<String>())
+                .scale(24.0)
                 .color(untyped_color)
         );
 
