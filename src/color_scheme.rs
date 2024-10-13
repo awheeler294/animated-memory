@@ -13,36 +13,38 @@ pub enum ColorPalette {
     Blue,
     BrightYellow,
     Orange,
+    TransparentBg,
 }
 
 impl ColorPalette {
-    fn as_rgb(self) -> (u8, u8, u8) {
+    fn as_rgba(self) -> (u8, u8, u8, u8) {
         match self {
-            Self::Bg => (40, 40, 40),
-            Self::Bg1 => (60, 56, 54),
-            Self::Bg2 => (80, 73, 69),
-            Self::Fg0 => (251, 241, 199),
-            Self::Fg => (235, 219, 178),
-            Self::Fg4 => (168, 153, 132),
-            Self::Blue => (69, 133, 136),
-            Self::BrightYellow => (250, 189, 47),
-            Self::Orange => (214, 93, 14),
+            Self::Bg => (40, 40, 40, 255),
+            Self::Bg1 => (60, 56, 54, 255),
+            Self::Bg2 => (80, 73, 69, 255),
+            Self::Fg0 => (251, 241, 199, 255),
+            Self::Fg => (235, 219, 178, 255),
+            Self::Fg4 => (168, 153, 132, 255),
+            Self::Blue => (69, 133, 136, 255),
+            Self::BrightYellow => (250, 189, 47, 255),
+            Self::Orange => (214, 93, 14, 255),
+            Self::TransparentBg => (29, 32, 33, 200),
         }
     }
 }
 
 impl Into<Color> for ColorPalette {
     fn into(self) -> Color {
-        let (r, g, b) = self.as_rgb();
-        Color::from_rgb(r, g, b)
+        let (r, g, b, a) = self.as_rgba();
+        Color::from_rgba(r, g, b, a)
     }
 }
 
 impl Into<TweenableColor> for ColorPalette {
     fn into(self) -> TweenableColor {
-        let (r, g, b) = self.as_rgb();
+        let (r, g, b, a) = self.as_rgba();
         
-        let color = Color::from_rgb(r, g, b);
+        let color = Color::from_rgba(r, g, b, a);
 
         TweenableColor {
             r: color.r,

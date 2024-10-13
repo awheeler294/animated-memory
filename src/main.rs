@@ -3,12 +3,13 @@ extern crate good_web_game as ggez;
 use std::env;
 use std::path;
 
-use game::Game;
+use game::GameManager;
 use getrandom::register_custom_getrandom;
 use good_web_game::GameResult;
 
-mod game;
 mod color_scheme;
+mod game;
+mod menu;
 mod screen;
 
 use color_scheme::{ColorPalette, TweenableColor};
@@ -37,11 +38,11 @@ fn main() -> GameResult {
         .window_height(SCREEN_HEIGHT)
         .physical_root_dir(Some(resource_dir));
 
-    let game = Game::new(SCREEN_WIDTH as f32, SCREEN_HEIGHT as f32);
+    let game_manager = GameManager::new();
 
     ggez::start(
         conf,
-        |mut _ctx, mut _gctx| Box::new(game),
+        |mut _ctx, mut _gctx| Box::new(game_manager),
     )
 
 }

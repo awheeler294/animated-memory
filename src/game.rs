@@ -25,7 +25,142 @@ use good_web_game::{
 use keyframe::{functions::{EaseInOut, Linear}, AnimationSequence, Keyframe };
 use rand::{prelude::SliceRandom, Rng, thread_rng};
 
-use crate::{ColorPalette, TweenableColor};
+use crate::{
+    menu::{MainMenu, Menu, EXIT, MAIN_MENU, NEW_GAME, PAUSE_MENU_TITLE, RESUME}, 
+    ColorPalette, 
+    TweenableColor
+};
+
+
+pub enum GameState {
+    Active,
+    MainMenu,
+    Paused,
+}
+
+use GameState::*;
+
+pub struct GameManager<'a> {
+    game_state: GameState,
+    game: Game,
+    main_menu: MainMenu<'a>,
+    pause_menu: Menu<'a>
+}
+
+impl<'a> GameManager<'a> {
+    pub fn new() -> Self {
+        Self {
+            game_state: MainMenu,
+            game: Game::new(0.0, 0.0),
+            main_menu: MainMenu::new(),
+            pause_menu: Menu::new(PAUSE_MENU_TITLE, &[RESUME, MAIN_MENU, EXIT]).shade_background(true),
+        }
+    }
+}
+
+impl<'a> good_web_game::event::EventHandler for GameManager<'a> {
+
+    fn update(&mut self, ctx: &mut Context, gctx: &mut event::GraphicsContext) -> Result<(), GameError> {
+        match self.game_state {
+            Active => self.game.update(ctx, gctx),
+            MainMenu => self.main_menu.update(ctx, gctx),
+            Paused => self.pause_menu.update(ctx, gctx),
+        }
+    }
+
+    fn draw(&mut self, ctx: &mut Context, gctx: &mut event::GraphicsContext) -> Result<(), GameError> {
+        if let MainMenu = self.game_state {
+            self.main_menu.draw(ctx, gctx)?;
+        } else {
+            self.game.draw(ctx, gctx)?;
+
+            if let Paused = self.game_state {
+                self.pause_menu.draw(ctx, gctx)?;
+            }
+        }
+
+        // debug
+        let (screen_width, screen_height) = graphics::drawable_size(gctx);
+
+        let text = Text::new(TextFragment::new(format!("drawable_size: {screen_width}, {screen_height}")));
+        graphics::draw(ctx, gctx, &text, (Point2::new(0.0, 0.0),))?;
+
+        graphics::present(ctx, gctx)?;
+
+        Ok(())
+    }
+
+    fn key_down_event(
+            &mut self,
+            ctx: &mut Context,
+            gctx: &mut event::GraphicsContext,
+            keycode: KeyCode,
+            keymods: event::KeyMods,
+            repeat: bool,
+        ) {
+        match self.game_state {
+            
+            Active => {
+                if keycode == KeyCode::Escape {
+                    self.game_state = Paused
+                } else {
+                    self.game.key_down_event(ctx, gctx, keycode, keymods, repeat)
+                }
+            },
+            
+            MainMenu => {
+                if keycode == KeyCode::Enter {
+                    let selected = self.main_menu.selected_item();
+                    
+                    if selected == NEW_GAME {
+                        
+                        let (screen_width, screen_height) = graphics::drawable_size(gctx);
+                        self.game = Game::new(screen_width, screen_height);
+                        self.game_state = Active;
+                        self.main_menu.show_resume(true);
+
+                    } else if selected == RESUME {
+                        
+                        self.game_state = Active;
+
+                    } else if selected == EXIT {
+
+                    }
+                } else {
+                    self.main_menu.key_down_event(ctx, gctx, keycode, keymods, repeat)
+                }
+            },
+
+            Paused => {
+                if keycode == KeyCode::Enter {
+                    
+                    let selected = self.pause_menu.selected_item();
+
+                    if selected == RESUME {
+                        self.game_state = Active;
+                    } else if selected == EXIT {
+                        
+                    } else if selected == MAIN_MENU {
+                        self.game_state = MainMenu
+                    }
+
+                    self.pause_menu.reset_selection();
+
+                } else if keycode == KeyCode::Escape {
+                    
+                    self.game_state = Active;
+                    
+                    self.pause_menu.reset_selection();
+
+                } else {
+                    
+                    self.pause_menu.key_down_event(ctx, gctx, keycode, keymods, repeat)
+                }
+            },
+        }
+        
+    }
+}
 
 pub struct Game {
     player: Player,
@@ -38,12 +173,12 @@ impl Game {
     pub fn new(screen_width: f32, screen_height: f32) -> Self {
 
         let player_radius = 4.0; 
-        let player_position = Point2::new(screen_width as f32 / 2.0 + player_radius, screen_height as f32 - 10.0);
+        let player_position = Point2::new(screen_width / 2.0, screen_height - 30.0);
         
         let mut words = vec![];
-        let radius = screen_height - 20.0;
-        let center_x = screen_width;
-        let center_y = screen_height - 10.0;
+        let radius = screen_height / 1.7;
+        let center_x = screen_width / 2.0;
+        let center_y = screen_height / 2.0 - 30.0;
 
         for (label, angle) in [
             ("0", 0.0), 
@@ -81,10 +216,11 @@ impl Game {
             let y = r * theta.sin() + center_y;
 
             words.push(Word::new(
-                word, Point2::new(x, y), 
+                word, 
+                Point2::new(x, y), 
                 Vector2::new(
-                    (player_position.x - x + center_x / 2.0)  / (500.0 + r / 2.0), 
-                    (player_position.y - y + center_y) / (500.0 + r / 2.0)
+                    (player_position.x - x) / (500.0 + r / 2.0), 
+                    (player_position.y - y) / (500.0 + r / 2.0)
                 ))
             );
         }
@@ -154,8 +290,6 @@ impl event::EventHandler for Game {
         }
 
         self.player.draw(ctx, gctx)?;
-
-        graphics::present(ctx, gctx)?;
         
         Ok(())
     }
@@ -256,7 +390,11 @@ impl Word {
         //     TextFragment::new(format!(" state: {:#?}", self.state)).color(ColorPalette::Fg4)
         // );
 
-        graphics::draw(ctx, gctx, &rendered, (self.position,))?;
+        let centered_position = Point2::new(
+            self.position.x - rendered.width(ctx) / 2.0,
+            self.position.y - rendered.height(ctx) / 2.0
+        );
+        graphics::draw(ctx, gctx, &rendered, (centered_position,))?;
 
         Ok(())
     }
@@ -283,7 +421,7 @@ impl EventHandler for Player {
 
     fn draw(&mut self, ctx: &mut Context, gctx: &mut event::GraphicsContext) -> Result<(), GameError> {
         let image = graphics::MeshBuilder::new()
-            .circle(DrawMode::fill(), self.position, self.radius, self.precision, ColorPalette::Orange.into())?
+            .circle(DrawMode::fill(), Point2::new(-1.0 * self.radius,  -1.0 * self.radius), self.radius, self.precision, ColorPalette::Orange.into())?
             .build(ctx, gctx)?;
 
         graphics::draw(ctx, gctx, &image, (self.position,))?;
