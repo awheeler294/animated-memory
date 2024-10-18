@@ -9,6 +9,7 @@ use good_web_game::GameResult;
 
 mod color_scheme;
 mod game;
+mod word;
 mod menu;
 mod screen;
 
