@@ -367,7 +367,7 @@ impl Word {
 
     fn draw(&mut self, ctx: &mut Context, gctx: &mut event::GraphicsContext) -> GameResult {
         let typed_color = match self.state {
-            WordState::Active => ColorPalette::BrightYellow.into(),
+            WordState::Active => ColorPalette::Bg4.into(),
             WordState::Typed => self.death_animation.now_strict().unwrap_or_else(|| ColorPalette::Bg.into()),
             WordState::Dead => ColorPalette::Bg.into(),
         };
